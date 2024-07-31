@@ -1,0 +1,64 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8"/>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>WebRTC demo</title>
+    <style>
+	
+	body {
+	background:black;
+	color:white;
+	}
+	
+	p {
+		line-height:1.6;
+		font-size:5vw;
+		padding: 0vw 1vw;
+		text-align:center;
+		position:absolute;
+		bottom:5vh;
+	}
+	
+	h1 {
+		font-family: Arial;
+		text-align: center;
+		color:white;
+	}
+	
+    button {
+        padding: 8px 16px;
+    }
+
+    pre {
+        overflow-x: hidden;
+        overflow-y: auto;
+    }
+
+    video {
+        width: 100%;
+    }
+
+    .option {
+        margin-bottom: 8px;
+    }
+
+    #media {
+        max-width: 1280px;
+    }
+    </style>
+</head>
+<body>
+
+<h1>RailSafe Navigator</h1>
+<div id="media" style="display: none">
+<video id="video" autoplay="true" playsinline="true"></video>
+
+</div>
+<p style="text-align:left">Designed and implemented by Saen Kazak as a component of a Computer Science undergraduate project, in partnership with Brunel University London.</p>
+<script src="client.js"></script>
+<audio id="detectLeft" src="./left" type="audio/mpeg" hidden></audio>
+<audio id="detectRight" src="./right" type="audio/mpeg" hidden></audio>
+
+</body>
+</html>
