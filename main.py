@@ -1,121 +1,121 @@
 # Import the modules we need
 
-print("Importing OpenCV.")
+print("Loading OpenCV...")
 import cv2
-print("Loaded OpenCV.")
-
-print("Loading other modules...")
+print("Loading Ultralytics YOLOv8...")
 from ultralytics import YOLO
+print("Importing NumPy...")
 import numpy as np
+print("Importing argparse...")
 import argparse
+print("Importing AsyncIO...")
 import asyncio
+print("Importing JSON...")
 import json
+print("Importing Logging...")
 import logging
+print("Importing OS Tools...")
 import os
+print("Importing SSL Tools...")
 import ssl
+print("Importing UUID Tools...")
 import uuid
+print("Loading GPU Accelerated Torch...")
 import torch
+print("Loading AIORTC Modules...")
 from aiohttp import web
 from aiortc import MediaStreamTrack, RTCPeerConnection, RTCSessionDescription
 from aiortc.contrib.media import MediaBlackhole, MediaPlayer, MediaRecorder, MediaRelay
 from av import VideoFrame
-print("Loaded other modules.")
 
 ROOT = os.path.dirname(__file__)
-detections = []
+
 # Allows us to log our RTCPeerConnection
 logger = logging.getLogger("pc")
 pcs = set()
 relay = MediaRelay()
-frame = ""
+
+print("Starting Model Inference...")
 # Load the local PyTorch model
 model = YOLO('best.pt')
-
-# We define a class that will take our frames and infer them on the recv() method
+debugresults = []
 class VideoTransformTrack(MediaStreamTrack):
     kind = "video"
     def __init__(self, track, transform):
+        global debugresults
         super().__init__()
         self.track = track
         self.transform = transform
 
     async def recv(self):
-        global detections
-        global frame
-        global results
         frame = await self.track.recv()
         w = frame.width
         h = frame.height
-        img = frame.to_ndarray(format="bgr24")  # Convert the raw data to inferrable N-Dimensional array
+        img = frame.to_ndarray(format="bgr24") # Convert the raw data to inferrable N-Dimensional array
+        results = model(source=img, conf=0.25, iou=0.5)
 
-        # Prepare the image for the model
-        img_tensor = torch.from_numpy(img).permute(2, 0, 1).float().unsqueeze(0) / 255
-
-        # Infer the model
-        with torch.no_grad():
-            results = model(img_tensor)
-        
-        # Process the detections (assuming YOLO format)
-        # Note: This part might need adjustment based on your specific model's output format
-        detections.append(results[0])
-        image_width, image_height = img.shape[1], img.shape[0]
-
-        # Create individual masks for tracks and platforms in the same format
-        maskplatforms = np.zeros((image_height, image_width), dtype=np.uint8)
-        masktracks = np.zeros((image_height, image_width), dtype=np.uint8)
-
-        # Initialise for 'Most Significant Platform/Track Detection'
-        mspd = [0,0]
-        mstd = [0,0]
-
-        # Dig through the detection data
-        for detection in detections:
-            class_name = int(detection[5])  # Assuming the class index is in the 6th position
-            confidence = detection[4]  # Assuming the confidence score is in the 5th position
-            points = detection[:4]  # Assuming the bounding box coordinates are in the first 4 positions
-
-            if class_name == 0:  # Assuming class 0 is "platform"
-                if confidence > mspd[1]:
-                    mspd[0] = points
-                    mspd[1] = confidence
-
-            elif class_name == 1:  # Assuming class 1 is "track"
-                if confidence > mstd[1]:
-                    mstd[0] = points
-                    mstd[1] = confidence
-
-        if mspd != [0,0]: # If we actually detected platforms in this frame...
-            x1, y1, x2, y2 = map(int, mspd[0])
-            cv2.rectangle(maskplatforms, (x1, y1), (x2, y2), 255, thickness=cv2.FILLED)
+        for detection in results: # Per Frame
+            debugresults.append(detection)
+            maskplatforms = np.zeros((h, w), dtype=np.uint8)
+            masktracks = np.zeros((h, w), dtype=np.uint8)
             
-        if mstd != [0,0]: # If we actually detected tracks in this frame...
-            x1, y1, x2, y2 = map(int, mstd[0])
-            cv2.rectangle(masktracks, (x1, y1), (x2, y2), 255, thickness=cv2.FILLED)
+            mspd = [0,0]
+            mstd = [0,0]
+            
+            for i in range(0,detection.boxes.cls.size()[0]): # Per Detection in Frame
+                if(detection.boxes.cls[i].item() == 0.0):
+                    print("Platform Detected")
+                    ccp = detection.boxes.conf[i].item()
+                    if(ccp > mspd[1]):
+                        mspd[0] = i 
+                        mspd[1] = ccp
+                        
+                if(detection.boxes.cls[i].item() == 1.0):
+                    print("Track Detected")
+                    cct = detection.boxes.conf[i].item()
+                    if(cct > mstd[1]):
+                        mstd[0] = i
+                        mstd[1] = cct
+                
+            if(mspd != [0,0]):
+                points = np.array(detection.masks[mspd[0]].xy[0],dtype='int32')
+                cv2.fillPoly(maskplatforms, [points], 255)
 
-        # As long as we have BOTH a platform and a track detected
-        if (mspd != [0,0] and mstd != [0,0]):
-            maskplatforms = cv2.threshold(maskplatforms, 0, 255, cv2.THRESH_BINARY + cv2.THRESH_OTSU)[1]
-            masktracks = cv2.threshold(masktracks, 0, 255, cv2.THRESH_BINARY + cv2.THRESH_OTSU)[1]
-            img[maskplatforms == 255] = (255, 255, 0)  # Will display as yellow
-            img[masktracks == 255] = (255, 0, 255)  # Will display as blue
+            if(mstd != [0,0]):
+                points = np.array(detection.masks[mstd[0]].xy[0],dtype='int32')
+                cv2.fillPoly(masktracks, [points], 255)
 
-            detected = ''  # Right or left of the camera?
+            if (mspd != [0,0] and mstd != [0,0]):
 
-            if mspd[0][0] < mstd[0][0]: 
-                detected = 'R'
-            else:
-                detected = 'L'
+                # Combine our masks together
+                maskplatforms = cv2.threshold(maskplatforms, 0, 255, cv2.THRESH_BINARY + cv2.THRESH_OTSU)[1]
+                masktracks = cv2.threshold(masktracks, 0, 255, cv2.THRESH_BINARY + cv2.THRESH_OTSU)[1]
+                img[maskplatforms == 255] = (255, 255, 0) # Will display as yellow
+                img[masktracks == 255] = (255, 0, 255) # Will display as blue
+                
+                detected = '' # Right or left of the camera?
+                
+                # If the track is to the right of the platform...
+                if(detection.masks[mspd[0]].xyn[0][0][0] < detection.masks[mstd[0]].xyn[0][0][0]): 
+                    detected = 'R' # We'll set 'detected' to 'R'
 
-            if dc is not None:  # as long as the data channel is set up...
-                if detected == 'L':
-                    dc.send("playLeft")  # Send the playLeft message to the datachannel
-                if detected == 'R':
-                    dc.send("playRight")  # Or send the playRight message to the datachannel
+                # If the track is to the left of the platform...   
+                else:
+                    detected = 'L' # We'll set 'detected' to 'L'
+                
+                if dc != None: # as long as the data channel is set up...
+                    if detected == 'L':
+                        dc.send("playLeft") # Send the playLeft message to the datachannel
+                        
+                    if detected == 'R':
+                        dc.send("playRight") # Or send the playRight message to the datachannel
+                
+            # Convert our N-d array back to image format with all the masking added and return as a new frame.
+            new_frame = VideoFrame.from_ndarray(img, format="bgr24")
+            new_frame.pts = frame.pts
+            new_frame.time_base = frame.time_base
+            return new_frame
 
-        new_frame = VideoFrame.from_ndarray(img, format="bgr24")
-        new_frame.pts = frame.pts
-        new_frame.time_base = frame.time_base
-        return new_frame
 
 # These functions allow us to serve elements of the media server as URL paths...
 
@@ -163,7 +163,7 @@ async def offer(request):
     # When the data channel is detected, we'll send a message to the JS console
     @pc.on("datachannel")
     def on_datachannel(channel):
-        global dc  # We also want to make sure datachannel is global...
+        global dc # We also want to make sure datachannel is global...
         # ...so the VideoStreamTrack class can send audio info
         
         dc = channel
@@ -183,6 +183,7 @@ async def offer(request):
         log_info("Track %s received", track.kind)
         
         if track.kind == "video":
+
             pc.addTrack(
                 VideoTransformTrack(
                     relay.subscribe(track),
@@ -208,6 +209,8 @@ async def offer(request):
             {"sdp": pc.localDescription.sdp, "type": pc.localDescription.type}
         ),
     )
+
+
 
 async def on_shutdown(app):
     # close peer connections

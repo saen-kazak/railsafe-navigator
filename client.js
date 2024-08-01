@@ -119,7 +119,7 @@ function start() {
 			videoConstraints.facingMode = {ideal:"environment"}
 			videoConstraints.deviceId = { ideal: lastVideoDeviceId}
 			
-			const resolution = "1024x1024"
+			const resolution = "640x640"
 			const dimensions = resolution.split('x');
 			videoConstraints.height = {ideal:640}
 			videoConstraints.frameRate = {exact:10}
