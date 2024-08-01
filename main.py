@@ -37,7 +37,7 @@ relay = MediaRelay()
 
 print("Starting Model Inference...")
 # Load the local PyTorch model
-model = YOLO('best.pt')
+model = YOLO('model.pt')
 debugresults = []
 class VideoTransformTrack(MediaStreamTrack):
     kind = "video"
